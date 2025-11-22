@@ -22,6 +22,9 @@ async def sign_xml_data(xml_string):
 
     payload = {
         "xml": xml_string,
+        # 🔥 ДОДАЙ ЦІ ДВА РЯДКИ! БЕЗ НИХ ТЕНДЕР НЕ ПІДПИШЕТЬСЯ 🔥
+        "createTsp": True,
+        "useTsaPolicy": "TSA_GOST_POLICY",
         "signers": [
             {
                 "key": key_b64, # <--- Шлем КЛЮЧ, а не ПУТЬ

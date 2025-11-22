@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><root><key>7d270c09f0e037161086b6668ed15f49</key><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+<ds:SignedInfo>
+<ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+<ds:SignatureMethod Algorithm="urn:ietf:params:xml:ns:pkigovkz:xmlsec:algorithms:gostr34102015-gostr34112015-512"/>
+<ds:Reference URI="">
+<ds:Transforms>
+<ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+<ds:Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315#WithComments"/>
+</ds:Transforms>
+<ds:DigestMethod Algorithm="urn:ietf:params:xml:ns:pkigovkz:xmlsec:algorithms:gostr34112015-512"/>
+<ds:DigestValue>Qfl1rtFlkHHy4uS6RGO6MfmPiJdjLQK9HOYBTaeVyBAWouPFyaKDkf6LVFQEXaQ85z0YfD4+ZaBp
+4RzBsIFfBg==</ds:DigestValue>
+</ds:Reference>
+</ds:SignedInfo>
+<ds:SignatureValue>
+5ZQ6gw48KjbX1Re9VU+5iB16J4NMawHyDWNfsv/eoHzkpS65ewHS9zVcsHn1TBnd5I7cV74RHIs7
+PKZ68VaQCGAzv1Oni0Y0VLybJvr7s7h1j3MQQg14PRC9vEEiSHmFDxQXphuHmtAAMDCcGuc+HRUT
+2LthJMC0fo9u127qUZw=
+</ds:SignatureValue>
+<ds:KeyInfo>
+<ds:X509Data>
+<ds:X509Certificate>
+MIIEVTCCA72gAwIBAgIUEwsdYEeGDMu17AoaSvn2wMy/cqYwDgYKKoMOAwoBAQIDAgUAMFgxSTBH
+BgNVBAMMQNKw0JvQotCi0KvSmiDQmtCj05jQm9Cw0J3QlNCr0KDQo9Co0Ksg0J7QoNCi0JDQm9Cr
+0pogKEdPU1QpIDIwMjIxCzAJBgNVBAYTAktaMB4XDTI0MTIzMDA4NTUyM1oXDTI1MTIzMDA4NTUy
+M1owgZ0xLDAqBgNVBAMMI9Ch0KPQoNCQ0J/QkdCV0KDQk9CV0J3QntCSINCQ0JzQmNCgMSMwIQYD
+VQQEDBrQodCj0KDQkNCf0JHQldCg0JPQldCd0J7QkjEYMBYGA1UEBRMPSUlOODIwNTA1MzAwNzA0
+MQswCQYDVQQGEwJLWjEhMB8GA1UEKgwY0JTQkNCj0JvQldCi0JHQkNCV0JLQmNCnMIGsMCMGCSqD
+DgMKAQECAjAWBgoqgw4DCgEBAgIBBggqgw4DCgEDAwOBhAAEgYA+HprH9mCZavPEWl0eWFw0j4nA
+VzC/xR1nScmgD3zVnRHM1C8+dCh2NkkqTvqUhrclfJU8PrKYb3jEHT1eARoM4CLEoXh9JYL0xSA6
+MHmf8mnV1a1DzCcE3JrGh8JFxtl7G5gBs1nY2SSmvbL6QlfmyOZaR2bPEj+paJ/ZCBbRqKOCAcUw
+ggHBMA4GA1UdDwEB/wQEAwIDyDAdBgNVHSUEFjAUBggrBgEFBQcDBAYIKoMOAwMEAQEwOAYDVR0g
+BDEwLzAtBgYqgw4DAwIwIzAhBggrBgEFBQcCARYVaHR0cDovL3BraS5nb3Yua3ovY3BzMDgGA1Ud
+HwQxMC8wLaAroCmGJ2h0dHA6Ly9jcmwucGtpLmdvdi5rei9uY2FfZ29zdF8yMDIyLmNybDA6BgNV
+HS4EMzAxMC+gLaArhilodHRwOi8vY3JsLnBraS5nb3Yua3ovbmNhX2RfZ29zdF8yMDIyLmNybDBo
+BggrBgEFBQcBAQRcMFowIgYIKwYBBQUHMAGGFmh0dHA6Ly9vY3NwLnBraS5nb3Yua3owNAYIKwYB
+BQUHMAKGKGh0dHA6Ly9wa2kuZ292Lmt6L2NlcnQvbmNhX2dvc3RfMjAyMi5jZXIwHgYDVR0RBBcw
+FYETc2FkLXNlcnZpY2VAbWFpbC5ydTAdBgNVHQ4EFgQUAwsdYEeGDMu17AoaSvn2wMy/cqYwHwYD
+VR0jBBgwFoAU/jC+n8iQYz8f/1o8DLDIX0xtFwgwFgYGKoMOAwMFBAwwCgYIKoMOAwMFAQEwDgYK
+KoMOAwoBAQIDAgUAA4GBAMuamJnuvXkzlfIgwshqDHlqcX+0cMevB5nrA/PQqXg2jCUt+VauM57B
+4Z9xl5kct/Z4kWrfHThJmeHzhbVBnoVwK0j5FW235z0LeK7eyUfXxuM/L0i0E0KXP1jHhcdyQTmv
+XLAnfOy/x1o9a8t1yAG6wvKj/bGc3I0Uzax53lG1
+</ds:X509Certificate>
+</ds:X509Data>
+</ds:KeyInfo>
+</ds:Signature></root>

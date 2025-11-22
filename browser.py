@@ -233,6 +233,11 @@ async def run_browser_task():
                 key_btn = page.get_by_text("Выберите ключ", exact=False)
                 await key_btn.wait_for(state="visible", timeout=10000)
                 await key_btn.click()
+                
+                logger.info("⏳ Жду реакции сайта...")
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=5000)
+                except: pass
             except:
                 logger.warning("⚠️ Кнопка не нажалась с первого раза. Ждем отработки 'Бумеранга'...")
                 # Вместо жесткой перезагрузки, просто подождем, пока JS сам обновит страницу
@@ -255,7 +260,13 @@ async def run_browser_task():
             except: pass
 
             # Пароль
-            await page.locator("input[type='password']").fill(GOV_PASSWORD)
+            try:
+                await page.locator("input[type='password']").fill(GOV_PASSWORD)
+            except Exception as e:
+                logger.warning(f"⚠️ Ошибка ввода пароля (возможно страница обновилась): {e}")
+                await asyncio.sleep(1)
+                await page.locator("input[type='password']").fill(GOV_PASSWORD)
+
             await asyncio.sleep(0.5)
             await page.locator(".btn-success").click()
             logger.info("🚀 Вход нажат...")
