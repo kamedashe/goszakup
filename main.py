@@ -1,46 +1,43 @@
 import asyncio
 import logging
-import sys
-import os
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command
-from aiogram.types import FSInputFile
-from config import TOKEN
+from config import load_config
 from browser import run_browser_task
+from tender import process_lot
 
-logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("COMMANDER")
 
-bot = Bot(token=TOKEN)
-dp = Dispatcher()
+async def main():
 
-@dp.message(Command("start"))
-async def start(msg: types.Message):
-    await msg.answer("Привіт! Тисни /test")
+    await send_telegram("🤖 Бот запущен! <b>Системы в норме.</b>")
 
-@dp.message(Command("test"))
-async def run_test(msg: types.Message):
-    m = await msg.answer("🚀 Запускаю діагностику...")
+    cfg = load_config()
     
-    # Чистимо старі файли
-    for f in ["debug_what_i_see.png", "success.png", "error_stuck.png", "debug_page.html"]:
-        if os.path.exists(f): os.remove(f)
-
+    # 1. АВТОРИЗАЦИЯ
+    logger.info("🚀 ЗАПУСК: Вход в систему...")
     try:
-        res = await run_browser_task()
-        await m.edit_text(f"📝 Звіт:\n{res}")
-        
-        # Відправляємо все, що знайшли
-        files = ["debug_what_i_see.png", "success.png", "error_stuck.png"]
-        for f in files:
-            if os.path.exists(f):
-                await msg.answer_photo(FSInputFile(f), caption=f"Файл: {f}")
-                
-        # Відправляємо HTML як документ, якщо він є (щоб ти міг відкрити і подивитись код сторінки)
-        if os.path.exists("debug_page.html"):
-             await msg.answer_document(FSInputFile("debug_page.html"), caption="Код сторінки")
-
+        # Получаем живую страницу из browser.py
+        browser, context, page = await run_browser_task()
     except Exception as e:
-        await m.edit_text(f"❌ Помилка: {e}")
+        logger.error(f"💥 Ошибка входа: {e}")
+        return
+
+    # 2. ПОДАЧА ЗАЯВКИ
+    logger.info("⚔️ ЗАПУСК: Обработка лота...")
+    try:
+        await process_lot(
+            page, 
+            cfg['target']['lot_url'], # Ссылка на лот из конфига
+            cfg['data']['cooks']      # Список поваров
+        )
+    except Exception as e:
+        logger.error(f"💥 Ошибка в тендере: {e}")
+    finally:
+        # 3. УБОРКА
+        logger.info("💤 Завершение работы...")
+        await asyncio.sleep(5) # Даем время полюбоваться
+        await browser.close()
+
 
 if __name__ == "__main__":
-    asyncio.run(dp.start_polling(bot))
+    asyncio.run(main())

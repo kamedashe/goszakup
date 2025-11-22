@@ -241,8 +241,9 @@ async def run_browser_task():
         # ОСТАНАВЛИВАЕМ СКРИПТ И ОТКРЫВАЕМ ОКНО ЗАПИСИ
         await page.pause() 
 
-        await browser.close()
-        return "Session Finished"
+        logger.info("🔓 Логин успешен. Передаю управление...")
+        # Мы НЕ закрываем браузер, мы возвращаем объекты, чтобы работать дальше
+        return browser, context, page
 
 if __name__ == "__main__":
     asyncio.run(run_browser_task())

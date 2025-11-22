@@ -1,26 +1,56 @@
 import os
+import yaml
+import logging
 
-# 1. Токен твого бота (отримай у @BotFather в Telegram)
-TOKEN = "8599751581:AAGaelfUnEhaGtb0xQ7_Uxcw4sTZpFASyd8"
+# Настройка логгера
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("CONFIG")
 
-# 2. Твій логін і пароль для входу на сайт goszakup.gov.kz
-GOV_LOGIN = "СУРАПБЕРГЕНОВ АМИР"
-GOV_PASSWORD = "1Qaz2wsx!"
-GOV_URL = "https://v3bl.goszakup.gov.kz/ru/user/login"
+def load_config():
+    config_path = "config.yaml"
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"❌ Файл конфигурации не найден: {config_path}")
+    
+    with open(config_path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
 
-# 3. Пароль від твого файлу ключа .p12 (взяв з твого скріншоту)
-KEY_PASSWORD = "1Qaz2wsx!" 
+# Загружаем данные
+try:
+    cfg = load_config()
+    logger.info("✅ Config loaded from YAML")
+except Exception as e:
+    logger.error(f"Config error: {e}")
+    exit(1)
 
-# --- ТЕХНІЧНІ НАЛАШТУВАННЯ ---
+# --- ЭКСПОРТ ПЕРЕМЕННЫХ (ОСТАВЛЯЕМ ИМЕНА КАК БЫЛИ) ---
 
-# Визначаємо, де ми запускаємось (Docker чи Local)
+# 1. Telegram
+TOKEN = cfg['telegram']['token']
+
+# 2. Данные входа
+GOV_LOGIN = cfg['account']['login']
+GOV_PASSWORD = cfg['account']['password']
+GOV_URL = cfg['target']['url']
+KEY_PASSWORD = cfg['account']['sign_password']
+
+# --- ТЕХНИЧЕСКАЯ ЛОГИКА (DOCKER vs LOCAL) ---
+
 IN_DOCKER = os.path.exists("/.dockerenv")
 
+# Имя файла ключа
+key_filename = cfg['paths']['key_filename']
+
 if IN_DOCKER:
-    NCANODE_URL = "http://ncanode:14579"
-    KEY_PATH = "/goszakup/data/GOST512_030b1d6047860ccbb5ec0a1a4af9f6c0ccbf72a6.p12"
+    logger.info("🐳 Detected Environment: DOCKER")
+    NCANODE_URL = cfg['services']['ncanode_docker']
+    # Склеиваем путь: /goszakup/data + имя файла
+    KEY_PATH = os.path.join(cfg['paths']['docker_dir'], key_filename)
 else:
-    # Налаштування для локального запуску (Windows)
-    NCANODE_URL = "http://localhost:14579"
-    # Використовуємо абсолютний шлях для Windows
-    KEY_PATH = r"d:\goszakup\data\GOST512_030b1d6047860ccbb5ec0a1a4af9f6c0ccbf72a6.p12"
+    logger.info("💻 Detected Environment: LOCAL (Windows)")
+    NCANODE_URL = cfg['services']['ncanode_local']
+    # Склеиваем путь: d:/goszakup/data + имя файла
+    KEY_PATH = os.path.join(cfg['paths']['local_dir'], key_filename)
+
+# Выводим для проверки (но пароли не палим)
+logger.info(f"🔑 KEY_PATH: {KEY_PATH}")
+logger.info(f"🔗 NCANODE: {NCANODE_URL}")

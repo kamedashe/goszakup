@@ -23,6 +23,7 @@ auth.json
 data/
 certs/
 .env
+config.yaml
 
 # Editor
 .vscode/

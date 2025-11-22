@@ -1,18 +1,18 @@
 telegram:
-  token: "8599751581:AAGaelfUnEhaGtb0xQ7_Uxcw4sTZpFASyd8"
-  admin_id: "1917057396"
+  token: "YOUR_TELEGRAM_TOKEN"
+  admin_id: "YOUR_TELEGRAM_ADMIN_ID"
 
 account:
-  login: "СУРАПБЕРГЕНОВ АМИР"
-  password: "1Qaz2wsx!"
-  sign_password: "1Qaz2wsx!" # Пароль от ключа
+  login: "YOUR_LOGIN"
+  password: "YOUR_PASSWORD"
+  sign_password: "YOUR_SIGN_PASSWORD" # Пароль от ключа
 
 target:
   url: "https://v3bl.goszakup.gov.kz/ru/user/login"
 
 paths:
   # Имя файла ключа (оно одинаковое и там, и там)
-  key_filename: "GOST512_030b1d6047860ccbb5ec0a1a4af9f6c0ccbf72a6.p12"
+  key_filename: "YOUR_KEY_FILENAME"
   # Путь внутри Докера
   docker_dir: "/goszakup/data"
   # Путь на Windows (Локально)
