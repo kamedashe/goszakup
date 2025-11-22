@@ -41,4 +41,14 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    retries = 0
+    while retries < 3:
+        try:
+            asyncio.run(main())
+            break # Если все ок, выходим
+        except Exception as e:
+            retries += 1
+            print(f"🔥 CRITICAL CRASH! Перезапуск через 5 сек... ({retries}/3)")
+            # Тут можно отправить алерт в телеграм: "Я упал, встаю!"
+            import time
+            time.sleep(5)
