@@ -9,6 +9,7 @@ account:
 
 target:
   url: "https://v3bl.goszakup.gov.kz/ru/user/login"
+  lot_url: "https://v3bl.goszakup.gov.kz/ru/application/docs/15701274/67761206"
 
 paths:
   # Имя файла ключа (оно одинаковое и там, и там)

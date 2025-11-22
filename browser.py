@@ -61,6 +61,57 @@ async def handle_ncalayer_request(msg_json):
                 }
                 logger.error("❌ Ошибка подписи")
 
+        # ... (после блока с version и xml) ...
+
+        # --- СЦЕНАРИЙ 3: ПОДПИСАНИЕ ФАЙЛА (NATIVE MODE) ---
+        elif module == "NURSign" and req_type == "binary":
+            upload_url = req.get("upload_url")
+            logger.info(f"📥 Запрос от сайта. Скачиваю файл: {upload_url}")
+            
+            try:
+                # Грузим куки из файла для скачивания
+                cookies = {}
+                if os.path.exists("auth.json"):
+                    with open("auth.json", 'r') as f:
+                        data = json.load(f)
+                        for c in data['cookies']:
+                            cookies[c['name']] = c['value']
+
+                # Качаем файл
+                import aiohttp
+                async with aiohttp.ClientSession(cookies=cookies) as session:
+                    async with session.get(upload_url, ssl=False) as resp:
+                        if resp.status == 200:
+                            file_bytes = await resp.read()
+                            logger.info(f"✅ Файл скачан ({len(file_bytes)} байт). Подписываю...")
+                            
+                            # Кодируем в Base64
+                            import base64
+                            data_b64 = base64.b64encode(file_bytes).decode('utf-8')
+                            
+                            # Подписываем (CMS)
+                            from signer import sign_cms_data
+                            signed_cms = await sign_cms_data(data_b64)
+                            
+                            if signed_cms:
+                                # ВОЗВРАЩАЕМ ТО, ЧТО ЖДЕТ NURSIGN
+                                response = {
+                                    "result": signed_cms,
+                                    "errorCode": "NONE",
+                                    "status": True,
+                                    "code": "200"
+                                }
+                                logger.info("✅ CMS подпись отправлена сайту!")
+                            else:
+                                response = {"errorCode": "WRONG_PASSWORD"}
+                        else:
+                            logger.error(f"❌ Ошибка скачивания: {resp.status}")
+                            response = {"errorCode": "FILE_DOWNLOAD_ERROR"}
+
+            except Exception as e:
+                logger.error(f"🔥 Ошибка binary: {e}")
+                response = {"errorCode": "INTERNAL_ERROR"}
+
         # --- ЗАГЛУШКИ ДЛЯ СТАРЫХ МОДУЛЕЙ (На всякий случай) ---
         elif module == "kz.gov.pki.knca.commonUtils":
             response = {
@@ -69,8 +120,21 @@ async def handle_ncalayer_request(msg_json):
             }
         
         else:
-            # Дефолтный ответ, чтобы не висело
-            response = {"errorCode": "NONE"}
+            # ЭТО ЛОВУШКА ДЛЯ НОВЫХ ЗАПРОСОВ
+            logger.warning(f"⚠️ ПОЙМАН НЕИЗВЕСТНЫЙ ЗАПРОС: {msg_json}")
+            
+            # Пытаемся сохранить его в файл, чтобы ты мог скинуть мне
+            with open("unknown_request.json", "a", encoding="utf-8") as f:
+                f.write(msg_json + "\n")
+
+            # Возвращаем "успех", чтобы сайт не завис, а показал ошибку (или прошел дальше)
+            response = {
+                "status": True,
+                "result": "TRUE", 
+                "responseObject": "TRUE",
+                "code": "200",
+                "errorCode": "NONE"
+            }
 
         return json.dumps(response)
 
@@ -81,58 +145,52 @@ async def handle_ncalayer_request(msg_json):
 
 async def run_browser_task():
     async with async_playwright() as p:
-        logger.info("🚀 Запуск браузера...")
+        logger.info("🚀 Запуск браузера (MANUAL MODE)...")
         
-        # 1. ЗАПУСК БРАУЗЕРА
-        browser = await p.chromium.launch(
-            headless=False,  # Для отладки видим окно. Для сервера ставь True.
-            args=[
-                "--start-maximized",
-                "--ignore-certificate-errors"  # Игнор ошибок SSL для локалхоста
-            ]
+        # 1. ЗАПУСКАЕМ ВРУЧНУЮ (БЕЗ 'with')
+        playwright = await async_playwright().start()
+    
+        browser = await playwright.chromium.launch(
+            headless=False, 
+            args=["--start-maximized", "--ignore-certificate-errors"]
         )
         
-        # 2. СОЗДАНИЕ КОНТЕКСТА (С КУКАМИ ИЛИ БЕЗ)
+        # 2. КОНТЕКСТ
         if os.path.exists("auth.json"):
-            logger.info("📂 Нашел сохраненную сессию (auth.json). Грузим куки...")
-            context = await browser.new_context(
-                no_viewport=True,
-                ignore_https_errors=True,
-                storage_state="auth.json" # <--- Загрузка куки
-            )
+            logger.info("📂 Грузим куки...")
+            context = await browser.new_context(no_viewport=True, ignore_https_errors=True, storage_state="auth.json")
         else:
-            logger.info("🆕 Сохраненной сессии нет. Будем логиниться с нуля.")
-            context = await browser.new_context(
-                no_viewport=True,
-                ignore_https_errors=True
-            )
+            logger.info("🆕 Чистая сессия.")
+            context = await browser.new_context(no_viewport=True, ignore_https_errors=True)
         
         page = await context.new_page()
         
-        # --- НАСТРОЙКА ОКРУЖЕНИЯ (ЛОГИ, МОКИ, ПЕРЕХВАТЧИКИ) ---
+        # ==========================================
+        # 🛠️ НАСТРОЙКА ОКРУЖЕНИЯ (ДЕЛАЕМ ЭТО СНАЧАЛА!)
+        # ==========================================
         
-        # Логи из консоли браузера
+        # Логи
         page.on("console", lambda msg: logger.info(f"🖥️ BROWSER: {msg.text}"))
         
-        # Пробрасываем функцию подписи в JS
+        # Мост Python <-> JS
         await page.expose_function("pythonSigner", handle_ncalayer_request)
         
-        # Инжектим наш JS-хак (WebSocket + Image + Fetch mock)
+        # JS Инъекция
         await page.add_init_script(MOCK_JS)
 
-        # ⛔ КАПКАН: Глушим редирект на страницу ошибки (отвечаем 204 No Content)
+        # ⛔ КАПКАН v7: МГНОВЕННЫЙ ЩИТ
         async def block_error_page(route):
             if "not_installed" in route.request.url:
-                logger.warning(f"⛔ Глушу редирект на ошибку: {route.request.url}")
+                logger.warning("🛡️ Блокирую (204). Ждем пока сайт переварит подпись.")
                 await route.fulfill(status=204, body="")
             else:
                 await route.continue_()
 
+        # Применяем капкан
         await page.route("**/sign_workaround/not_installed", block_error_page)
         
-        # 🛡️ ЭМУЛЯТОР HTTP СЕРВЕРА (CORS + OPTIONS)
+        # 🔥 HTTP ПЕРЕХВАТЧИК (ВОТ ОН ДОЛЖЕН БЫТЬ ТУТ, ВВЕРХУ!)
         async def handle_local_http(route, request):
-            # logger.info(f"🛡️ ПЕРЕХВАТ ЗАПРОСА: {request.method} {request.url}")
             headers = {
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -143,107 +201,84 @@ async def run_browser_task():
                 await route.fulfill(status=200, headers=headers)
                 return
             
-            # Ответ "Я живой"
             response_body = {"result": {"version": "1.4"}, "errorCode": "NONE"}
             await route.fulfill(status=200, body=json.dumps(response_body), headers=headers)
 
-        # Ловим всё на 13579
+        # Включаем перехват ДО того, как пойдем на сайт
         await page.route(lambda url: "13579" in url, handle_local_http)
 
-        # --- ЛОГИКА НАВИГАЦИИ ---
-
-        target_url = "https://v3bl.goszakup.gov.kz/ru/cabinet/profile" # Сразу в кабинет
-        login_url = GOV_URL # Страница логина
-
-        logger.info(f"🌍 Пробуем зайти в кабинет: {target_url}")
+        # ==========================================
+        # 🛡️ ТЕПЕРЬ МОЖНО ЛОГИНИТЬСЯ
+        # ==========================================
+        
+        TARGET_URL = "https://v3bl.goszakup.gov.kz/ru/cabinet/profile"
+        logger.info(f"🌍 Проверка сессии: {TARGET_URL}")
+        
         try:
-            await page.goto(target_url, wait_until="domcontentloaded", timeout=20000)
-        except Exception as e:
-            logger.warning(f"⚠️ Ошибка загрузки (возможно, редирект): {e}")
+            await page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=20000)
+            await asyncio.sleep(2)
+        except:
+            logger.warning("⚠️ Ошибка загрузки при проверке сессии.")
 
-        # Проверяем, пустило ли нас (или выкинуло на логин)
-        # Ждем немного, чтобы URL устаканился
-        await asyncio.sleep(2)
-        
-        if "login" not in page.url:
-            logger.info("✅ УРА! Мы уже в кабинете (куки сработали).")
-        
-        else:
-            logger.info("🔒 Нас перекинуло на логин. Начинаем процедуру входа...")
+        # Если выкинуло на логин — входим заново
+        if "login" in page.url or "auth" in page.url:
+            logger.warning("🔄 СЕССИЯ ИСТЕКЛА. Релогин...")
             
-            # Если мы на логине, но страница "зависла" из-за капкана, надо убедиться, что элементы прогрузились
-            # Или перейти на логин явно, если мы еще не там
-            if page.url != login_url:
-                 try:
-                    await page.goto(login_url, wait_until="domcontentloaded", timeout=15000)
-                 except: pass
+            if GOV_URL not in page.url:
+                await page.goto(GOV_URL, wait_until="domcontentloaded")
 
-            # 1. Жмем "Выберите ключ"
+            # Кнопка ключа
             logger.info("🖱️ Ищу кнопку 'Выберите ключ'...")
             try:
                 key_btn = page.get_by_text("Выберите ключ", exact=False)
                 await key_btn.wait_for(state="visible", timeout=10000)
                 await key_btn.click()
-                logger.info("✅ Кнопка ключа нажата.")
-            except Exception as e:
-                logger.error(f"❌ Не нашел кнопку ключа: {e}")
-                # Скриншот для отладки
-                await page.screenshot(path="debug_no_key_btn.png")
-                return
-
-            # 2. Ждем появления поля пароля и галочки
-            logger.info("⏳ Жду форму пароля...")
-            # Ждем появления input password
-            try:
-                password_input = page.locator("input[type='password']")
-                await password_input.wait_for(timeout=10000)
             except:
-                logger.error("❌ Форма пароля не появилась после выбора ключа!")
-                return
-
-            # 3. Ставим галочку (HARD MODE)
+                logger.warning("⚠️ Кнопка не нажалась с первого раза. Ждем отработки 'Бумеранга'...")
+                # Вместо жесткой перезагрузки, просто подождем, пока JS сам обновит страницу
+                await asyncio.sleep(3)
+                
+                # И попробуем найти кнопку снова
+                try:
+                    key_btn = page.get_by_text("Выберите ключ", exact=False)
+                    await key_btn.wait_for(state="visible", timeout=5000)
+                    await key_btn.click()
+                except:
+                    # Если совсем всё плохо - идем на URL входа явно
+                    logger.warning("⚠️ Кнопка так и не появилась. Идем на страницу входа принудительно.")
+                    await page.goto(GOV_URL, wait_until="domcontentloaded")
+            # Галочка
             try:
-                checkbox = page.locator("input[type='checkbox']")
-                await checkbox.check(force=True)
-                if not await checkbox.is_checked():
-                    await checkbox.evaluate("el => el.click()") # JS клик если не сработало
-                logger.info("✅ Галочка проставлена.")
-            except Exception as e:
-                logger.warning(f"⚠️ Проблема с галочкой: {e}")
+                cb = page.locator("input[type='checkbox']")
+                await cb.check(force=True)
+                if not await cb.is_checked(): await cb.evaluate("e => e.click()")
+            except: pass
 
-            # 4. Вводим пароль
-            await password_input.fill(GOV_PASSWORD)
-            logger.info("🔑 Пароль введен.")
-            
+            # Пароль
+            await page.locator("input[type='password']").fill(GOV_PASSWORD)
             await asyncio.sleep(0.5)
-
-            # 5. Жмем Войти
             await page.locator(".btn-success").click()
-            logger.info("🚀 Кнопка 'Войти' нажата! Ждем подписи XML...")
+            logger.info("🚀 Вход нажат...")
 
-            # 6. Ждем загрузки кабинета и СОХРАНЯЕМ КУКИ
+            # Ждем кабинет и сохраняем
             try:
-                # Ждем, пока URL перестанет содержать 'login' или появится элемент кабинета
                 await page.wait_for_url("**/cabinet/**", timeout=30000)
                 logger.info("🏠 КАБИНЕТ ЗАГРУЖЕН!")
-                
-                # СОХРАНЯЕМ КУКИ
                 await context.storage_state(path="auth.json")
-                logger.info("💾 Куки сохранены в auth.json")
-                
+                logger.info("💾 Куки обновлены.")
             except Exception as e:
-                logger.error(f"⚠️ Не дождался кабинета или тайм-аут: {e}")
+                logger.error(f"❌ Ошибка входа: {e}")
                 await page.screenshot(path="login_fail.png")
+                return None, None, None # Возвращаем пустоту при ошибке
 
-        # --- ЗДЕСЬ НАЧИНАЕТСЯ ТВОЯ БИЗНЕС-ЛОГИКА (ЗАЯВКИ) ---
-        logger.info("🤖 Бот готов к работе в кабинете...")
-        
-        # ОСТАНАВЛИВАЕМ СКРИПТ И ОТКРЫВАЕМ ОКНО ЗАПИСИ
-        await page.pause() 
+        else:
+            logger.info("✅ Куки валидны! Мы в кабинете.")
 
-        logger.info("🔓 Логин успешен. Передаю управление...")
-        # Мы НЕ закрываем браузер, мы возвращаем объекты, чтобы работать дальше
-        return browser, context, page
+        # ==========================================
+
+        logger.info("🔓 Готов к работе. Передаю управление...")
+        # Возвращаем и playwright тоже, чтобы потом его закрыть корректно
+        return playwright, browser, context, page
 
 if __name__ == "__main__":
     asyncio.run(run_browser_task())

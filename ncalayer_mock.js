@@ -1,18 +1,84 @@
-console.log("💉 NCALayer Mock Injected (v3 - TOTAL CONTROL)");
+console.log("💉 NCALayer Mock Injected (v8 - SNIPER XML)");
 
-// --- 1. MOCK WEB SOCKET (Ты это уже видел) ---
+// 1. МОСТ К PYTHON
+window.processNCALayer = async function (jsonDat) {
+    try {
+        const response = await window.pythonSigner(JSON.stringify(jsonDat));
+        return JSON.parse(response);
+    } catch (e) {
+        console.error("Python signer error:", e);
+        return { status: false, code: "500" };
+    }
+}
+
+// 2. СУПЕР-ФУНКЦИЯ ПОДПИСИ (SNIPER EDITION)
+window.SUPER_SIGN = async function (fileUrl, formId) {
+    console.log("🚀 SUPER_SIGN: Цель захвачена", fileUrl);
+
+    try {
+        // Скачиваем
+        const resp = await fetch(fileUrl);
+        const blob = await resp.blob();
+
+        // Конвертируем
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+
+        reader.onloadend = async function () {
+            const base64data = reader.result.split(',')[1];
+
+            // Подписываем
+            const request = {
+                module: "NURSign",
+                type: "cms_raw",
+                data: base64data
+            };
+
+            const responseJson = await window.pythonSigner(JSON.stringify(request));
+            const result = JSON.parse(responseJson);
+
+            // Отправляем
+            if (result && result.result) {
+                console.log("✅ Подпись есть. Ищу форму:", formId);
+                const form = document.getElementById(formId);
+
+                if (form) {
+                    // --- СНАЙПЕРСКИЙ ВЫСТРЕЛ ---
+                    // Ищем поле 'xml'
+                    let input = form.querySelector('input[name="xml"]');
+
+                    // Если его нет - создаем
+                    if (!input) {
+                        input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = 'xml'; // <--- ТОЛЬКО ЭТО ИМЯ
+                        form.appendChild(input);
+                    }
+
+                    // Вставляем подпись
+                    input.value = result.result;
+
+                    console.log("🚀 ОТПРАВКА: поле 'xml' заполнено.");
+                    form.submit();
+                } else {
+                    console.error("❌ Форма не найдена:", formId);
+                }
+            }
+        }
+    } catch (e) {
+        console.error("❌ Ошибка:", e);
+    }
+};
+
+// 3. СЕТЕВЫЕ ЗАГЛУШКИ
 const originalWebSocket = window.WebSocket;
 window.WebSocket = function (url) {
     if (url.includes('127.0.0.1:13579') || url.includes('localhost:13579')) {
-        console.log("🔒 WS Перехвачен:", url);
         const mockWS = {
             readyState: 1,
             send: function (data) {
-                console.log("📤 WS Send:", data);
-                // Шлем в Python
                 if (window.pythonSigner) {
                     window.pythonSigner(data).then(resp => {
-                        console.log("📥 WS Recv:", resp);
                         if (mockWS.onmessage) mockWS.onmessage({ data: resp });
                     });
                 }
@@ -29,91 +95,22 @@ window.WebSocket = function (url) {
     return new originalWebSocket(url);
 };
 
-// --- 2. MOCK HTTP FETCH (ДЛЯ РЕЗЕРВНОЙ ПРОВЕРКИ) ---
 const originalFetch = window.fetch;
 window.fetch = async function (input, init) {
     const url = input.toString();
-    if (url.includes('127.0.0.1:13579') || url.includes('localhost:13579')) {
-        console.log("🛡️ FETCH Перехвачен:", url);
-
-        // Эмулируем ответ сервера NCALayer
-        const fakeResponse = {
-            result: { version: "1.4" },
-            errorCode: "NONE"
-        };
-
-        return new Response(JSON.stringify(fakeResponse), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
-        });
+    if (url.includes('127.0.0.1:13579')) {
+        return new Response(JSON.stringify({ result: { version: "1.4" }, errorCode: "NONE" }), { status: 200 });
     }
     return originalFetch(input, init);
 };
 
-// --- 3. MOCK XMLHTTPRequest (ДЛЯ СТАРЫХ СКРИПТОВ) ---
-const originalXHR = window.XMLHttpRequest;
-window.XMLHttpRequest = function () {
-    const xhr = new originalXHR();
-    const originalOpen = xhr.open;
-
-    xhr.open = function (method, url) {
-        if (url.toString().includes('127.0.0.1:13579') || url.toString().includes('localhost:13579')) {
-            console.log("🛡️ XHR Перехвачен:", url);
-
-            // Подменяем отправку
-            xhr.send = function () {
-                const fakeResponse = JSON.stringify({
-                    result: { version: "1.4" },
-                    errorCode: "NONE"
-                });
-
-                // Эмулируем задержку сети и ответ
-                setTimeout(() => {
-                    Object.defineProperty(xhr, 'responseText', { value: fakeResponse });
-                    Object.defineProperty(xhr, 'status', { value: 200 });
-                    Object.defineProperty(xhr, 'readyState', { value: 4 });
-                    if (xhr.onreadystatechange) xhr.onreadystatechange();
-                    if (xhr.onload) xhr.onload();
-                }, 50);
-            };
-            return;
-        }
-        return originalOpen.apply(this, arguments);
-    };
-    return xhr;
-};
-
-// --- 4. НАСИЛЬНО ГОВОРИМ САЙТУ, ЧТО ВСЁ ОК ---
-window.helpers = window.helpers || {};
-window.helpers.check_ncalayer = function () { return true; }; // Заглушка функции проверки
-
-// 5. БЛОКИРОВКА РЕДИРЕКТА НА ОШИБКУ ЧЕРЕЗ JS
-// Если сайт вызовет window.location.href = "...", мы это проигнорируем, если там "not_installed"
-const originalSet = Object.getOwnPropertyDescriptor(window.Location.prototype, 'href').set;
-Object.defineProperty(window.location, 'href', {
-    set: function (val) {
-        if (val.toString().includes('not_installed')) {
-            console.log("🚫 BLOCKED REDIRECT TO ERROR PAGE:", val);
-            return; // Игнорируем!
-        }
-        originalSet.call(this, val);
-    }
-});
-
-// 6. ПЕРЕХВАТ ЗАГРУЗКИ КАРТИНОК (IMAGE PING)
-// Сайт может проверять наличие слоя, пытаясь загрузить иконку с локалхоста
 const originalImage = window.Image;
 window.Image = function (width, height) {
     const img = new originalImage(width, height);
-
     Object.defineProperty(img, 'src', {
         set: function (url) {
-            if (url && (url.includes('127.0.0.1:13579') || url.includes('localhost:13579'))) {
-                console.log("🖼️ IMAGE PING Перехвачен:", url);
-                // Эмулируем успешную загрузку через 10мс
-                setTimeout(() => {
-                    if (img.onload) img.onload();
-                }, 10);
+            if (url && url.includes('127.0.0.1:13579')) {
+                setTimeout(() => { if (img.onload) img.onload(); }, 10);
                 return;
             }
             this.setAttribute('src', url);
@@ -122,3 +119,15 @@ window.Image = function (width, height) {
     });
     return img;
 };
+
+window.helpers = window.helpers || {};
+window.helpers.check_ncalayer = function () { return true; };
+
+// Блокировка редиректа JS
+const originalSet = Object.getOwnPropertyDescriptor(window.Location.prototype, 'href').set;
+Object.defineProperty(window.location, 'href', {
+    set: function (val) {
+        if (val.toString().includes('not_installed')) return;
+        originalSet.call(this, val);
+    }
+});
