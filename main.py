@@ -3,6 +3,7 @@ import logging
 from config import load_config
 from browser import run_browser_task
 from tender import process_lot
+from notifier import send_telegram
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("COMMANDER")
