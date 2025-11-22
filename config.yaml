@@ -1,0 +1,17 @@
+account:
+  login: "YOUR_LOGIN"
+  password: "YOUR_PASSWORD"
+  sign_password: "123456" # Пароль от ЭЦП
+
+target:
+  lot_url: "https://v3bl.goszakup.gov.kz/ru/announce/index/15646421"
+  start_time: "09:00:00" # Время начала атаки
+
+data:
+  cooks:
+    - name: "Иванов Иван"
+      diploma_number: "NO12345"
+      file_path: "data/diploma_ivanov.pdf"
+    - name: "Петров Петр"
+      diploma_number: "NO67890"
+      file_path: "data/diploma_petrov.pdf"
