@@ -1,0 +1,273 @@
+<!DOCTYPE html><html lang="ru"><head>
+    <meta charset="utf-8">
+    <title>Авторизация</title>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="msapplication-TileColor" content="#ffffff">
+    <meta name="msapplication-TileImage" content="/ms-icon-144x144.png">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="robots" content="noindex">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="apple-touch-icon" sizes="57x57" href="/images/favicon/apple-icon-57x57.png">
+    <link rel="apple-touch-icon" sizes="60x60" href="/images/favicon/apple-icon-60x60.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="/images/favicon/apple-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="76x76" href="/images/favicon/apple-icon-76x76.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="/images/favicon/apple-icon-114x114.png">
+    <link rel="apple-touch-icon" sizes="120x120" href="/images/favicon/apple-icon-120x120.png">
+    <link rel="apple-touch-icon" sizes="144x144" href="/images/favicon/apple-icon-144x144.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="/images/favicon/apple-icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/images/favicon/apple-icon-180x180.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/images/favicon/android-icon-192x192.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="96x96" href="/images/favicon/favicon-96x96.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon/favicon-16x16.png">
+    <link href="/css/bootstrap.min.css?1718828694" rel="stylesheet">
+    <link href="/fonts/fontawesome/css/all.min.css?1718828694" rel="stylesheet">
+    <link href="/css/style.css?1752638539" rel="stylesheet">
+    <link href="https://v3bl.goszakup.gov.kz/css/datepicker.css?1718828694" rel="stylesheet">
+<link href="https://v3bl.goszakup.gov.kz/css/file/upload.css?1718828694" rel="stylesheet">
+
+    <script src="/js/jquery.js?1718828694"></script>
+    <script src="/js/bootstrap.min.js?1718828694"></script>
+    <script src="/js/confirmation.js?1718828694"></script>
+    
+    
+    <script type="text/javascript" src="https://v3bl.goszakup.gov.kz/js/bootstrap.datepicker.js?1718828694" charset="utf-8"></script>
+<script type="text/javascript" src="https://v3bl.goszakup.gov.kz/js/bootstrap-datepicker.ru.js?1718828694" charset="utf-8"></script>
+<script type="text/javascript" src="https://v3bl.goszakup.gov.kz/js/helpers.js?1727179784" charset="utf-8"></script>
+<script type="text/javascript" src="https://v3bl.goszakup.gov.kz/js/file/upload.js?1718828694" charset="utf-8"></script>
+<script type="text/javascript" src="https://v3bl.goszakup.gov.kz/js/jquery.blockUI.js?1718828694" charset="utf-8"></script>
+<script type="text/javascript" src="https://v3bl.goszakup.gov.kz/js/bootstrap-filestyle.min.js?1718828694" charset="utf-8"></script>
+<script type="text/javascript" src="https://v3bl.goszakup.gov.kz/js/base64js.min.js?1718828694" charset="utf-8"></script>
+
+    <script>
+            var user_id = 0;
+            window.lang_key = "ru";
+            window.current_controller_url = "https://v3bl.goszakup.gov.kz/ru/user";
+            
+            window.current_directory = "";
+            window.current_controller = "user";
+            window.current_method = "login";
+
+            window.url_params = [];
+            ; var lang = 'ru'; var controller = 'user';    </script>
+</head>
+<body style="">
+
+<!-- BEGIN WRAP -->
+<div class="wrap">
+    <!-- BEGIN NAVBAR -->
+    <div id="navbar-main" class="navbar navbar-default navbar-fixed-top" role="navigation">
+        <div class="container-fluid">
+            <div class="navbar-header">
+                <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#main-nav">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+                <a class="navbar-brand big-screen-element" href="/">АИИС ЭГЗ</a>
+            </div>
+            <div id="main-nav" class="navbar-collapse collapse">
+                                <ul class="nav navbar-nav"><li><a href="https://goszakup.gov.kz">Главная</a></li><li><a href="https://wiki.goszakup.gov.kz/">Справка</a></li></ul>
+                <ul class="nav navbar-nav navbar-right">
+                <li><a href="https://v3bl.goszakup.gov.kz/kz/user/login">Қаз</a></li>
+                <li><a href="https://v3bl.goszakup.gov.kz/ru/user/login">Рус</a></li>
+              <li>
+                       <a id="user-login" href="https://v3bl.goszakup.gov.kz/ru/user/login"> <span class="glyphicon glyphicon-user " id="online-status"></span> Войти</a>
+                     </li></ul>
+                <ul id="navbar-notice" class="nav navbar-nav navbar-right"></ul>
+            </div>
+        </div>
+    </div>
+    <!-- END NAVBAR -->
+
+    <!-- BEGIN CONTAINER -->
+    <div class="container-full">
+        <div class="alert alert-danger" id="offline-message">
+            <strong>Внимание!</strong> Соединение с приложением прервано. Пожалуйста, авторизуйтесь заново.
+        </div>
+        
+        
+        
+        
+        
+        <div id="loading" class="alert alert-info" style="display: none">Подождите, идет загрузка данных</div>
+        
+        
+                        <div class="content-block"><div class="col-sm-4 col-sm-offset-4">
+    <div class="panel panel-info">
+        <div class="panel-heading">
+            <b>Авторизация</b>
+            <span class="pull-right">
+                <a role="button" id="ssl" class="btn btn-success btn-xs" href="https://v3bl.goszakup.gov.kz/ru/user/login" data-toggle="tooltip" data-placement="bottom" title="Войти с помощью SSL сертификата">
+                    <span class="glyphicon glyphicon-lock"></span>
+                </a>
+            </span>
+        </div>
+        <div class="panel-body">
+            <div class="text-center">
+                <select id="country_selector" name="country" autocomplete="off" style="background-repeat: no-repeat; background-image:url('/images/flag/kz.png');  background-position: left; padding-left: 25px; font-size:16px;" onchange="set_applet(this.value)">
+                    
+                    <option style="background-image:url('/images/flag/kz.png'); background-repeat: no-repeat; background-position: left; min-height: 25px; padding:4px 0 4px 25px;  min-width: 150px; " value="kz" selected="selected">Республика Казахстан
+                    </option>
+                    
+                </select>
+            </div>
+            <div id="applet_storage">
+                <script language="JavaScript" type="text/javascript">
+    function sign_xml(sdata, after_sign_callback) {
+        sign_collback = {};
+        sign_collback.error = function (result) {
+            $('#applet_storage').unblock();
+            $('#ajaxresult').removeClass().addClass('bg-danger').html(form_sign_helper.get_error_text(result));
+        };
+        sign_collback.select_file = function () {
+            $('#ajaxresult').removeClass().addClass('bg-success').html('Выберите хранилище сертификата');
+        };
+        sign_collback.input_password = function () {
+            $('#ajaxresult').removeClass().addClass('bg-success').html('Введите пароль');
+        };
+        sign_collback.user_interaction = function (result) {
+            $('#applet_storage').unblock();
+            $('#ajaxresult').removeClass().addClass('bg-danger').html(form_sign_helper.get_error_text(result.action));
+        };
+        sign_collback.data_signed = function (result) {
+            $('#applet_storage').unblock();
+            after_sign_callback(result);
+        };
+
+        $('#applet_storage').block({message: '<h3>Пожалуйста подождите....</h3>'});
+        sign_collback.data_signed_callback = sign_collback.data_signed;
+        sign_collback.source = 'local';
+        helpers.sign_workaround.form_sign_helper.sign_raw(sign_collback,'xml',sdata);
+    }
+
+    function selectP12File() {
+        $.ajax({
+            type: "POST",
+            url: "https://v3bl.goszakup.gov.kz/ru/user/sendkey/kz",
+            data: [],
+            success: function (data, status) {
+                var xml = '\<\?xml version="1.0" encoding="UTF-8"\?\><root><key>' + data + '</key></root>';
+                sign_xml(xml, function (result) {
+                    var send_data = {sign: result};
+                    $.ajax({
+                        type: "POST",
+                        url: "/user/sendsign/kz",
+                        data: send_data,
+                        success: function (data, status) {
+                            $('#ajaxresult').html(data);
+                        },
+                        error: function (jqXHR, textStatus, errorThrown) {
+                            $('#ajaxresult').html('Ошибка сервера [' + errorThrown + ']');
+                            // updateAjaxResult('Ошибка сервера [' + errorThrown + ']');
+                        }
+                    });
+                })
+            },
+            error: function (e, textStatus, errorThrown) {
+                // updateAjaxResult(e.responseText);
+                $('#ajaxresult').html('Ошибка сервера [' + errorThrown + ']');
+            }
+        });
+    }
+
+    function updateStatusSpan(str, data) {
+
+        if (data != null || data != '') {
+            $("#status").html("");
+            $("#status").html(str + "<b><i>" + data + "</i></b>");
+        }
+    }
+
+    function sendSignature(signature) {
+
+
+    }
+
+</script>
+
+<div class="text-center">
+    <br>
+    <input class="btn btn-primary" name="selectP12File" id="selectP12File" value="Выберите ключ" onclick="selectP12File()" type="button">
+    <input class="btn btn-primary" type="button" style="display:none;" id="Kaztoken" value="Kaztoken" onclick="alert('Работа с казтокеном не сделана в локальном приложении');//selectkaztoken()">
+
+    <br><br><a class="btn btn-primary" href="https://v3bl.goszakup.gov.kz/ru/user/sso_redirect">Авторизоваться через SSO</a>
+    <br><br>
+
+    <div id="ajaxresult"></div>
+
+</div>
+
+
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row">
+    <div class="col-sm-4 col-sm-offset-4" style="padding-left: 19px;padding-right: 19px;">
+        <div class="panel panel-info">
+            <div class="panel-heading">
+                <strong>
+                    Для поиска лотов/объявлений пройдите по ссылкам                </strong>
+            </div>
+            <div class="panel-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <a href="https://goszakup.gov.kz/ru/search/announce" target="_blank" rel="noopener noreferrer">
+                            <strong style="font-size: 16px">
+                                <span class="glyphicon glyphicon-list-alt" aria-hidden="true"></span>
+                                Поиск объявлений                            </strong>
+                        </a>
+                    </div>
+                    <div class="col-md-6">
+                        <a href="https://goszakup.gov.kz/ru/search/lots" target="_blank" rel="noopener noreferrer">
+                            <strong style="font-size: 16px">
+                                <span class="glyphicon glyphicon-list-alt" s="" aria-hidden="true"></span>
+                                Поиск лотов                            </strong>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    function set_applet(fl) {
+        document.location.href = 'https://v3bl.goszakup.gov.kz/ru/user/login/' + fl;
+    }
+</script>
+</div>
+        <div class="clearfix"></div>
+        
+            </div>
+    <!-- END CONTAINER -->
+
+</div>
+<!-- END WRAP -->
+
+
+
+<!-- BEGIN FOOTER -->
+<footer class="footer">
+    <div class="container">
+        <p class="pull-left">
+            АИИС ЭГЗ © 2025 | <a href="https://www.minfin.gov.kz">Министерство финансов Республики Казахстан</a>
+        </p>
+        <p class="pull-right">
+            <span class="ecc">
+                <a href="https://ecc.kz">АО «Центр электронных финансов»</a>
+            </span>
+        </p>
+    </div>
+    <p class="text-center text-muted">
+        Техническая поддержка пользователей портала (7/7 с 08:00 до 20:00): 8(7172) 73 55 15, +7 705 956 53 88 (в соответствие с тарифами оператора связи), <a href="mailto:support@ecc.kz">support@ecc.kz</a>    </p>
+</footer>
+<!-- END FOOTER -->
+
+
+
+
+</body></html>

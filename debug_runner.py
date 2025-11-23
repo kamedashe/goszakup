@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import sys
-from browser import run_browser_task
+from browser import init_browser, perform_login, check_auth
 from config import load_config
 from tender import process_lot
 
@@ -14,7 +14,7 @@ logging.basicConfig(
 logger = logging.getLogger("DEBUG_RUNNER")
 
 async def main():
-    print("🚀 ЗАПУСК ОТЛАДКИ ПОЛНОГО ЦИКЛА...")
+    print("🚀 ЗАПУСК ОТЛАДКИ ПОЛНОГО ЦИКЛА (NEW ARCHITECTURE)...")
     
     # 1. Грузим конфиг
     cfg = load_config()
@@ -24,18 +24,20 @@ async def main():
     browser = None
 
     try:
-        # 2. Логинимся (получаем 4 объекта!)
-        logger.info("🔑 ЭТАП 1: ВХОД В СИСТЕМУ...")
-        playwright, browser, context, page = await run_browser_task()
+        # 2. Инициализация
+        logger.info("🔑 ЭТАП 1: ИНИЦИАЛИЗАЦИЯ БРАУЗЕРА...")
+        playwright, browser, context, page = await init_browser(headless=False)
         
-        if not page:
-            logger.error("❌ Браузер не вернулся. Ошибка входа.")
-            return
+        # 3. Проверка авторизации
+        if not await check_auth(page):
+            logger.warning("⚠️ Сессия не активна. Пробую войти...")
+            if not await perform_login(page, context):
+                logger.error("❌ Не удалось войти. Стоп.")
+                return
 
-        # 3. ЗАПУСКАЕМ ТЕНДЕРНУЮ ЛОГИКУ
+        # 4. ЗАПУСКАЕМ ТЕНДЕРНУЮ ЛОГИКУ
         logger.info("⚔️ ЭТАП 2: ОБРАБОТКА ЛОТА...")
         
-        # Убедись, что в config.yaml target.lot_url ведет на страницу СО СПИСКОМ документов!
         await process_lot(
             page, 
             cfg['target']['lot_url'], 
@@ -45,7 +47,7 @@ async def main():
     except Exception as e:
         logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА В РАННЕРЕ: {e}")
         import traceback
-        traceback.print_exc() # Покажет, где именно упало
+        traceback.print_exc() 
     
     finally:
         logger.info("🛑 ВСЕ ЗАДАЧИ ВЫПОЛНЕНЫ. Браузер висит на паузе.")
