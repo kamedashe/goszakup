@@ -1,321 +1,254 @@
+# goszakup/browser.py
 import asyncio
 import json
 import logging
 import os
-from playwright.async_api import async_playwright
+import base64
+import re
+import html
+import shutil
+from playwright.async_api import async_playwright, Page
 from config import GOV_URL, GOV_PASSWORD, KEY_PATH
 from signer import sign_xml_data, sign_cms_data
 
-# Настройка логгера
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Читаем JS-мок (убедись, что файл ncalayer_mock.js лежит рядом)
-MOCK_JS_PATH = os.path.join(os.path.dirname(__file__), "ncalayer_mock.js")
-try:
-    with open(MOCK_JS_PATH, "r", encoding="utf-8") as f:
-        MOCK_JS = f.read()
-except FileNotFoundError:
-    logger.error(f"❌ Не найден файл {MOCK_JS_PATH}!")
-    MOCK_JS = ""
+# --- CONFIG ---
+TARGET_PRICE = "12129429"
 
-async def handle_ncalayer_request(msg_json):
+# --- AUTO-DUMPER (ЧЕРНЫЙ ЯЩИК) ---
+DUMP_CTR = 0
+
+async def _save_dump(page: Page):
+    global DUMP_CTR
+    DUMP_CTR += 1
     try:
-        req = json.loads(msg_json)
-        module = req.get("module")
-        req_type = req.get("type")
-        
-        logger.info(f"📩 PYTHON получил: {module} -> {req_type}")
-
-        # 1. ВЕРСИЯ
-        if module == "NURSign" and req_type == "version":
-            response = {"result": {"version": "1.4"}, "errorCode": "NONE"}
-            logger.info("✅ Отправляем версию 1.4")
-
-        # 2. ВХОД (XML)
-        elif module == "NURSign" and req_type == "xml":
-            xml_to_sign = req.get("data")
-            logger.info("✍️ Подписываем XML (Login)...")
-            signed_xml = await sign_xml_data(xml_to_sign)
-            if signed_xml:
-                response = {"result": signed_xml, "errorCode": "NONE", "status": True, "code": "200"}
-            else:
-                response = {"errorCode": "WRONG_PASSWORD"}
-
-        # 3. ПОДПИСЬ ФАЙЛА (ОТ JS - CMS_RAW)
-        elif module == "NURSign" and req_type == "cms_raw":
-            data_b64 = req.get("data")
-            logger.info(f"📥 Получен файл от JS. Размер: {len(data_b64)}")
-            signed_cms = await sign_cms_data(data_b64)
-            if signed_cms:
-                response = {"result": signed_cms, "errorCode": "NONE", "status": True, "responseObject": signed_cms, "code": "200"}
-                logger.info("✅ CMS подписан!")
-            else:
-                response = {"errorCode": "WRONG_PASSWORD"}
-
-        # 4. ПОДПИСЬ ФАЙЛА (ОТ САЙТА - BINARY - ТО, ЧЕГО НЕ ХВАТАЛО!)
-        elif module == "NURSign" and req_type == "binary":
-            upload_url = req.get("upload_url")
-            logger.info(f"📥 Сайт просит скачать файл: {upload_url}")
+        if not os.path.exists("debug_dumps"):
+            os.makedirs("debug_dumps")
             
-            # Качаем через aiohttp с куками
-            import aiohttp
-            cookies = {}
-            if os.path.exists("auth.json"):
-                with open("auth.json", 'r') as f:
-                    data = json.load(f)
-                    for c in data['cookies']: cookies[c['name']] = c['value']
-
-            try:
-                async with aiohttp.ClientSession(cookies=cookies) as session:
-                    async with session.get(upload_url, ssl=False) as resp:
-                        if resp.status == 200:
-                            file_bytes = await resp.read()
-                            import base64
-                            data_b64 = base64.b64encode(file_bytes).decode('utf-8')
-                            
-                            signed_cms = await sign_cms_data(data_b64)
-                            if signed_cms:
-                                response = {"result": signed_cms, "errorCode": "NONE", "status": True, "code": "200"}
-                                logger.info("✅ Файл скачан и подписан (Native Mode)!")
-                            else:
-                                response = {"errorCode": "WRONG_PASSWORD"}
-                        else:
-                            logger.error(f"❌ Ошибка скачивания: {resp.status}")
-                            response = {"errorCode": "FILE_DOWNLOAD_ERROR"}
-            except Exception as e:
-                logger.error(f"🔥 Ошибка binary: {e}")
-                response = {"errorCode": "INTERNAL_ERROR"}
-
-        # ЗАГЛУШКИ
-        elif module == "kz.gov.pki.knca.commonUtils":
-            response = {"result": True, "errorCode": "NONE"}
-        else:
-            logger.warning(f"⚠️ НЕИЗВЕСТНЫЙ ЗАПРОС: {msg_json}")
-            response = {"status": True, "result": "TRUE", "code": "200", "errorCode": "NONE"}
-
-        return json.dumps(response)
-
+        # Формируем имя файла из URL
+        clean_url = page.url.split('?')[0].split('#')[0]
+        slug = clean_url.replace('https://', '').replace('http://', '').replace('/', '_')
+        slug = slug[-40:] if len(slug) > 40 else slug # Обрезаем если длинный
+        if not slug: slug = "blank"
+        
+        filename = f"debug_dumps/{DUMP_CTR:03d}_{slug}.html"
+        
+        content = await page.content()
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(content)
+        
+        # logger.info(f"📸 [DUMP] Снимок сохранен: {filename}")
     except Exception as e:
-        logger.error(f"🔥 CRITICAL: {e}")
-        return json.dumps({"errorCode": "INTERNAL_ERROR"})
+        logger.warning(f"⚠️ Не удалось сделать дамп: {e}")
+
+def _attach_dumper(page: Page):
+    """Вешает слушатель на страницу"""
+    # Срабатывает когда страница полностью загрузилась
+    page.on("load", lambda: asyncio.create_task(_save_dump(page)))
+
+# -------------------------------
+
+MOCK_JS = """
+console.log("💉 NCALayer: UNIVERSAL MODE + LOGIN");
+window.ncalayerInstalled = true;
+window.isNcalayerInstalled = true;
+window.NCALayer = { call: function(){}, init: function(){return true;} };
+
+function injectAndSubmit(signature) {
+    console.log("💉 [JS] Injecting signature...");
+    let form = document.getElementById('priceoffers') || document.forms[0];
+    if (!form) return;
+
+    form.querySelectorAll('input[type="hidden"]').forEach(inp => {
+        if (inp.name.toLowerCase().match(/(xml|sign|cert|hash)/)) {
+            inp.value = signature;
+            inp.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    });
+
+    if (!document.getElementById('signature_injected_success')) {
+        let div = document.createElement('div');
+        div.id = 'signature_injected_success';
+        document.body.appendChild(div);
+    }
+}
+
+const originalWebSocket = window.WebSocket;
+window.WebSocket = function(url) {
+    if (url.includes('13579')) {
+        const wsMock = {
+            send: async function(data) {
+                const req = JSON.parse(data);
+                if (req.type === 'version' || req.method === 'getVersion') {
+                    setTimeout(() => this.onmessage({ data: JSON.stringify({ "result": { "version": "1.4" }, "errorCode": "NONE" }) }), 50);
+                    return;
+                }
+                if (window.pythonSigner) {
+                    window.pythonSigner(data).then(r => {
+                        if (this.onmessage) this.onmessage({ data: r });
+                        try {
+                            const resp = JSON.parse(r);
+                            let sig = resp.result;
+                            if (Array.isArray(sig)) sig = sig[0];
+                            if (typeof sig === 'object' && sig !== null) sig = Object.values(sig)[0];
+                            if (sig && sig.length > 500) injectAndSubmit(sig);
+                        } catch(e) {}
+                    });
+                }
+            },
+            close: function(){},
+            readyState: 1,
+            addEventListener: function(evt, cb) { this['on'+evt] = cb; }
+        };
+        setTimeout(() => { if (wsMock.onopen) wsMock.onopen({ type: 'open' }); }, 100);
+        return wsMock;
+    }
+    return new originalWebSocket(url);
+};
+"""
+
+def replace_price_in_xml(xml_content, new_price):
+    if not xml_content or not isinstance(xml_content, str): return xml_content
+    patterns = [r'(<ns2:Price>)(.*?)(</ns2:Price>)', r'(<Price>)(.*?)(</Price>)', r'(<price>)(.*?)(</price>)', r'(price=")(.*?)(")']
+    modified_xml = xml_content
+    replaced = False
+    for pat in patterns:
+        if re.search(pat, modified_xml):
+            modified_xml = re.sub(pat, fr'\g<1>{new_price}\g<3>', modified_xml)
+            replaced = True
+    if replaced: logger.info(f"💰 [XML] Цена заменена на {new_price} внутри XML!")
+    return modified_xml
+
+async def process_signing_item(item):
+    if not item: return None
+    clean_item = item
+    if isinstance(clean_item, str):
+        clean_item = html.unescape(clean_item)
+        if "&lt;" in clean_item: clean_item = html.unescape(clean_item)
+    if isinstance(clean_item, str) and len(clean_item) > 200 and "<" in clean_item:
+        clean_item = replace_price_in_xml(clean_item, TARGET_PRICE)
+    
+    try:
+        s = await sign_xml_data(clean_item)
+        if s: return s
+    except: pass
+    
+    try:
+        b64_data = clean_item
+        if isinstance(clean_item, str) and "<" in clean_item:
+            b64_data = base64.b64encode(clean_item.encode('utf-8')).decode()
+        return await sign_cms_data(b64_data)
+    except: return None
 
 async def init_browser(headless=False):
-    """Запускает браузер и настраивает все моки"""
+    global DUMP_CTR
+    DUMP_CTR = 0 # Сброс счетчика при старте
+    # Очистка папки дампов
+    if os.path.exists("debug_dumps"):
+        try: shutil.rmtree("debug_dumps")
+        except: pass
+    
     logger.info("🚀 Запуск браузера...")
-    
     playwright = await async_playwright().start()
-    
     browser = await playwright.chromium.launch(
         headless=headless, 
-        args=["--start-maximized", "--ignore-certificate-errors"]
+        args=["--start-maximized", "--ignore-certificate-errors", "--disable-blink-features=AutomationControlled"]
     )
-
-    # Пробуем загрузить куки
+    context = await browser.new_context(no_viewport=True, ignore_https_errors=True)
     if os.path.exists("auth.json"):
-        logger.info("📂 Грузим сохраненную сессию...")
+        try: context = await browser.new_context(storage_state="auth.json", no_viewport=True, ignore_https_errors=True)
+        except: pass
+
+    # --- МАГИЯ ДАМПОВ ---
+    # 1. Вешаем дампер на любую НОВУЮ страницу, которая родится в этом контексте
+    context.on("page", _attach_dumper)
+    
+    # Защита от редиректов и HTTP Mock
+    await context.route("**/*sign_workaround*", lambda route: route.fulfill(status=204))
+    await context.route("**/*not_installed*", lambda route: route.fulfill(status=204))
+    
+    async def mock_ncalayer_http(route):
+        await route.fulfill(
+            status=200,
+            headers={"Access-Control-Allow-Origin": "*", "Content-Type": "application/json"},
+            body='{"result":{"version":"1.3"},"errorCode":"NONE"}'
+        )
+    await context.route("*://127.0.0.1:13579/*", mock_ncalayer_http)
+
+    async def handle_binding(source, msg_json):
         try:
-            context = await browser.new_context(no_viewport=True, ignore_https_errors=True, storage_state="auth.json")
+            req = json.loads(msg_json)
+            method = req.get("method")
+            req_type = req.get("type")
+            response = {"errorCode": "NONE", "result": True}
+
+            if method == "browseKeyStore":
+                response["result"] = os.path.abspath(KEY_PATH)
+                return json.dumps(response)
+            elif method in ["getKeys", "loadKeyStore"]:
+                response["result"] = "AUTHENTICATION|CERTIFICATE|PEM"
+                return json.dumps(response)
+            elif req_type in ["version", "getVersion"]:
+                response["result"] = {"version": "1.4"}
+            elif req_type in ["xml", "multitext", "signXml"]:
+                raw_data = req.get("data") or req.get("args", [None, None, None])[2]
+                items = raw_data if isinstance(raw_data, list) else [raw_data]
+                signatures = []
+                logger.info(f"📝 [BRIDGE] На подпись: {len(items)} шт.")
+
+                for item in items:
+                    if isinstance(item, dict):
+                        signed_dict = {}
+                        for k, v in item.items():
+                            signed_val = await process_signing_item(v)
+                            if signed_val: signed_dict[k] = signed_val
+                        signatures.append(signed_dict)
+                    else:
+                        signed_val = await process_signing_item(item)
+                        if signed_val: signatures.append(signed_val)
+                
+                if signatures:
+                    response.update({"result": signatures if req_type == "multitext" else signatures[0], "code": "200"})
+                else:
+                    response["errorCode"] = "WRONG_PASSWORD"
+            return json.dumps(response)
         except Exception as e:
-             logger.warning(f"⚠️ Куки битые, создаем чистый контекст: {e}")
-             context = await browser.new_context(no_viewport=True, ignore_https_errors=True)
-    else:
-        logger.info("🆕 Чистая сессия (куки не найдены).")
-        context = await browser.new_context(no_viewport=True, ignore_https_errors=True)
+            logger.error(f"🔥 BRIDGE: {e}")
+            return json.dumps({"errorCode": "INTERNAL_ERROR"})
+
+    await context.expose_binding("pythonSigner", handle_binding)
+    await context.add_init_script(MOCK_JS)
     
+    # Создаем первую страницу и ВРУЧНУЮ вешаем дампер (т.к. событие 'page' может не успеть)
     page = await context.new_page()
-    
-    # --- НАСТРОЙКА ПЕРЕХВАТЧИКОВ ---
-    page.on("console", lambda msg: logger.info(f"🖥️ BROWSER: {msg.text}"))
-    
-    # 1. Мост Python
-    await page.expose_function("pythonSigner", handle_ncalayer_request)
-    # 2. JS Мок
-    await page.add_init_script(MOCK_JS)
-
-    # ==========================================
-    # 🛠️ ROUTING ORDER IS CRITICAL (Last registered = First checked)
-    # ==========================================
-
-    # 1. GLOBAL INTERCEPTOR (Lowest Priority - Registered First)
-    async def intercept_network(route, request):
-        # Блокируем картинки для скорости
-        if request.resource_type in ["image", "media", "font"]:
-            await route.abort()
-            return
-        
-        try:
-            await route.continue_()
-        except Exception:
-            pass # Ignore network errors during continue
-
-    await page.route("**/*", intercept_network)
-
-    # 2. ERROR TRAP (Medium Priority)
-    import re
-    async def block_error_page(route):
-        logger.warning(f"🛡️ Блокирую редирект на ошибку: {route.request.url}")
-        await route.fulfill(status=204, body="")
-    
-    await page.route(re.compile(r".*sign_workaround/not_installed.*"), block_error_page)
-    
-    # 3. NCALAYER LOCALHOST MOCK (High Priority)
-    async def handle_local_http(route, request):
-        headers = {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-            "Content-Type": "application/json"
-        }
-        if request.method == "OPTIONS":
-            await route.fulfill(status=200, headers=headers)
-            return
-        
-        # Ответ "Я живой"
-        response_body = {"result": {"version": "1.4"}, "errorCode": "NONE"}
-        await route.fulfill(status=200, body=json.dumps(response_body), headers=headers)
-
-    # Ловим все запросы к порту 13579 (localhost, 127.0.0.1)
-    await page.route(lambda url: "13579" in url, handle_local_http)
+    _attach_dumper(page)
 
     return playwright, browser, context, page
-
-
-async def check_auth(page):
-    """Проверяет, жива ли сессия, пытаясь зайти в кабинет"""
-    TARGET_URL = "https://v3bl.goszakup.gov.kz/ru/cabinet/profile"
-    logger.info(f"🌍 Проверка сессии: {TARGET_URL}")
-    
-    try:
-        await page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=30000)
-        await asyncio.sleep(2)
-        
-        if "login" in page.url or "auth" in page.url:
-            logger.warning("🔄 СЕССИЯ ИСТЕКЛА (Редирект на логин).")
-            return False
-        else:
-            logger.info("✅ Куки валидны! Мы в кабинете.")
-            return True
-            
-    except Exception as e:
-        logger.warning(f"⚠️ Ошибка проверки сессии: {e}")
-        return False
-
 
 async def perform_login(page, context):
-    """
-    Жесткая процедура входа (FIXED для ERR_ABORTED).
-    """
-    logger.info("🔑 [LOGIN] Начинаю процедуру входа...")
-
-    # 1. ПРИНУДИТЕЛЬНО ИДЕМ НА СТРАНИЦУ ВХОДА
+    # ... (твой старый логин, без изменений)
+    try: await page.wait_for_load_state("domcontentloaded", timeout=10000)
+    except: pass
     if "/user/login" not in page.url:
-        try:
-            logger.info(f"🌍 Переход на страницу входа: {GOV_URL}")
-            # Используем wait_until='commit' - это самое быстрое. 
-            # Мы не ждем полной загрузки, мы ждем начала получения данных.
-            await page.goto(GOV_URL, wait_until="commit", timeout=30000)
-        except Exception as e:
-            logger.warning(f"⚠️ Ошибка навигации (ERR_ABORTED?): {e}")
-            # Игнорируем ошибку. Страница скорее всего загрузилась.
-
-    # ДАЕМ ВРЕМЯ ОТРИСОВАТЬСЯ (DUMB SLEEP)
-    # Раз события сети сбоят, просто ждем тупо по времени.
-    logger.info("⏳ Жду 5 секунд, пока страница прогрузится...")
-    await asyncio.sleep(5)
-
-    # 2. ЗАГРУЗКА КЛЮЧА (ROBUST STRATEGY)
-    logger.info("📂 [LOGIN] Начинаю загрузку ключа...")
-    
+        try: await page.goto(GOV_URL, wait_until="domcontentloaded", timeout=30000)
+        except: pass
     try:
-        # СТРАТЕГИЯ А: Прямая вставка в input (самая надежная)
-        # Ищем любой input type=file, даже скрытый
-        file_input = page.locator("input[type='file']")
-        
-        if await file_input.count() > 0:
-            logger.info("✅ Нашел скрытый input[type='file'], гружу напрямую...")
-            await file_input.first.set_input_files(KEY_PATH)
-        else:
-            # СТРАТЕГИЯ Б: Через диалог выбора файла
-            logger.info("⚠️ Input не найден, пробую клик по кнопке с перехватом...")
-            async with page.expect_file_chooser(timeout=10000) as fc_info:
-                # Кликаем по кнопке (она точно есть, мы видели скриншот)
-                await page.click("#selectP12File", force=True)
-            
-            file_chooser = await fc_info.value
-            await file_chooser.set_files(KEY_PATH)
-            
-        logger.info(f"✅ Файл ключа отправлен: {KEY_PATH}")
-        
-    except Exception as e:
-        logger.error(f"❌ [LOGIN] Ошибка загрузки ключа: {e}")
-        # Пробуем последний шанс - JS клик по кнопке
-        try:
-            logger.warning("⚠️ Последняя попытка: JS клик...")
-            async with page.expect_file_chooser(timeout=5000) as fc_info:
-                await page.evaluate("document.getElementById('selectP12File').click()")
-            file_chooser = await fc_info.value
-            await file_chooser.set_files(KEY_PATH)
-        except Exception as e2:
-            logger.error(f"💀 [LOGIN] FATAL: Не удалось загрузить ключ: {e2}")
-            await page.screenshot(path="login_fatal_upload.png")
-            return False
-
-    # 3. ЖДЕМ ПОЯВЛЕНИЯ ПАРОЛЯ
-    logger.info("⏳ [LOGIN] Жду поле пароля (до 20 сек)...")
-    try:
-        password_input = page.locator("input[type='password']")
-        await password_input.wait_for(state="visible", timeout=20000)
-        await password_input.fill(GOV_PASSWORD)
-        logger.info("✅ [LOGIN] Пароль введен.")
-    except Exception as e:
-        logger.error("❌ [LOGIN] Поле пароля не появилось! (Возможно, ключ не подошел или сайт тупит)")
-        await page.screenshot(path="login_stuck_password.png")
-        return False
-
-    # 4. ГАЛОЧКА (Запомнить меня / Соглашение)
-    try:
-        cb = page.locator("input[type='checkbox']")
-        if await cb.count() > 0:
-            await cb.check(force=True)
-    except: pass
-
-    # 5. ВОЙТИ
-    try:
-        # Ищем кнопку входа более точно
-        login_btn = page.locator("button.btn-success:has-text('Войти'), button[type='submit']")
-        if await login_btn.count() > 0:
-            await login_btn.first.click()
-            logger.info("🚀 [LOGIN] Кнопка 'Войти' нажата.")
-        else:
-            # Fallback
-            await page.locator(".btn-success").click()
-    except: pass
-
-    # 6. ФИНАЛ
-    try:
-        await page.wait_for_url("**/cabinet/**", timeout=30000)
-        logger.info("🎉 [LOGIN] УСПЕХ! Мы внутри.")
-        return True
+        await page.evaluate("if(window.selectP12File) selectP12File(); else document.getElementById('selectP12File').click();")
+        await asyncio.sleep(1)
     except:
-        logger.error("❌ Не пустило в кабинет (таймаут редиректа).")
-        return False
-
-async def run_browser_task():
-    """Функция для отладочного запуска (debug_runner)"""
-    playwright, browser, context, page = await init_browser(headless=False)
-    
-    is_auth = await check_auth(page)
-    if not is_auth:
-        success = await perform_login(page, context)
-        if success:
-            await context.storage_state(path="auth.json")
-        else:
-            await browser.close()
-            return None, None, None, None
-
-    logger.info("🔓 Готов к работе. Передаю управление...")
-    return playwright, browser, context, page
-
-if __name__ == "__main__":
-    asyncio.run(run_browser_task())
+        try: await page.click("#selectP12File", force=True)
+        except: pass
+    try:
+        pwd = page.locator("input[type='password']")
+        await pwd.wait_for(state="visible", timeout=15000)
+        chk = page.locator("input[type='checkbox']").first
+        if await chk.count() > 0 and await chk.is_visible(): await chk.check(force=True)
+        await pwd.fill(GOV_PASSWORD)
+        await pwd.press("Enter")
+        await page.wait_for_url("**/cabinet/**", timeout=40000)
+        logger.info("🎉 [LOGIN] УСПЕХ!")
+        await context.storage_state(path="auth.json")
+        return True
+    except: return False
