@@ -1,7 +1,7 @@
+# goszakup/main.py
 import asyncio
 import logging
-import os
-from config import load_config, GOV_URL
+from config import load_config
 from browser import init_browser, perform_login
 from tender_fast import process_lot_parallel 
 from notifier import send_telegram
@@ -10,26 +10,22 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger("SNIPER")
 
 async def main():
-    print("--- STARTING MAIN ---") # Самый первый принт
+    print("--- STARTING MAIN ---")
     cfg = load_config()
     lot_url = cfg['target']['lot_url']
     
-    logger.info("🚀 СНАЙПЕР: Инициализация...")
-    await send_telegram(f"🔫 <b>Bot started X-RAY</b>")
-
+    logger.info("🚀 СНАЙПЕР: Старт...")
+    
     playwright = None
     browser = None
     
     try:
         logger.info("🖥️ Запускаю браузер...")
         playwright, browser, context, page = await init_browser(headless=False)
-        logger.info("✅ Браузер запущен.")
         
         logger.info(f"⚡ Переход на лот: {lot_url}")
-        try:
-            await page.goto(lot_url, wait_until="domcontentloaded", timeout=20000)
-        except Exception as e:
-            logger.warning(f"⚠️ Ошибка перехода (игнорирую): {e}")
+        try: await page.goto(lot_url, wait_until="domcontentloaded")
+        except: pass
 
         # Проверка входа
         if "login" in page.url or "auth" in page.url:
@@ -38,17 +34,19 @@ async def main():
                  logger.info("✅ Вход выполнен.")
                  await page.goto(lot_url, wait_until="domcontentloaded")
             else:
-                 raise Exception("Не удалось войти.")
+                 logger.error("❌ Не удалось войти автоматом. Зайди руками!")
+                 await page.pause()
 
-        logger.info("⚔️ ЗАПУСК X-RAY...")
+        logger.info("⚔️ РАБОТА ПО ЛОТУ...")
         await process_lot_parallel(context, lot_url, cfg['data'])
 
     except Exception as e:
         logger.error(f"💥 CRASH: {e}")
     finally:
-        logger.info("💤 Завершение работы.")
-        if browser: await browser.close()
-        if playwright: await playwright.stop()
+        logger.info("🏁 Работа скрипта завершена. БРАУЗЕР ОСТАЕТСЯ ОТКРЫТЫМ.")
+        # Оставляем браузер висеть вечно
+        if page:
+            await page.pause()
 
 if __name__ == "__main__":
     asyncio.run(main())

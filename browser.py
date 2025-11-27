@@ -50,28 +50,61 @@ def _attach_dumper(page: Page):
 
 # -------------------------------
 
+# --- MOCK JS (ТЕПЕРЬ УМЕЕТ ЗАВЕРШАТЬ CMS ПОДПИСЬ) ---
 MOCK_JS = """
-console.log("💉 NCALayer: UNIVERSAL MODE + LOGIN");
+console.log("💉 NCALayer: UNIVERSAL MODE + LOGIN + CMS (AUTO-SUBMIT)");
 window.ncalayerInstalled = true;
 window.isNcalayerInstalled = true;
 window.NCALayer = { call: function(){}, init: function(){return true;} };
 
-function injectAndSubmit(signature) {
-    console.log("💉 [JS] Injecting signature...");
-    let form = document.getElementById('priceoffers') || document.forms[0];
-    if (!form) return;
-
-    form.querySelectorAll('input[type="hidden"]').forEach(inp => {
-        if (inp.name.toLowerCase().match(/(xml|sign|cert|hash)/)) {
-            inp.value = signature;
-            inp.dispatchEvent(new Event('change', { bubbles: true }));
+function injectAndSubmit(signature, isCms) {
+    console.log("💉 [JS] Injecting signature (CMS=" + isCms + ")...");
+    
+    // 1. Для XML (форма priceoffers)
+    if (!isCms) {
+        let form = document.getElementById('priceoffers') || document.forms[0];
+        if (form) {
+            form.querySelectorAll('input[type="hidden"]').forEach(inp => {
+                if (inp.name.toLowerCase().match(/(xml|sign|cert|hash)/)) {
+                    inp.value = signature;
+                    inp.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            });
         }
-    });
-
-    if (!document.getElementById('signature_injected_success')) {
-        let div = document.createElement('div');
-        div.id = 'signature_injected_success';
-        document.body.appendChild(div);
+        if (!document.getElementById('signature_injected_success')) {
+            let div = document.createElement('div');
+            div.id = 'signature_injected_success';
+            document.body.appendChild(div);
+        }
+    } 
+    
+    // 2. Для CMS (Приложения, файлы)
+    if (isCms) {
+        // Ищем кнопку, которая инициировала подпись (обычно у нее есть data-file-identifier)
+        // В helpers.js госзакупок логика такая: helpers.sign_workaround.form_sign_helper.sign_uploaded_file(this)
+        // После подписи вызывается .afterGenSignEvent()
+        
+        let buttons = document.querySelectorAll('.btn-add-signature');
+        buttons.forEach(btn => {
+            // Если у кнопки есть колбэк - вызываем его
+            if (btn.afterGenSignEvent) {
+                console.log("🚀 [JS] Вызываю afterGenSignEvent для кнопки...");
+                try { btn.afterGenSignEvent(signature); } catch(e) { console.error(e); }
+            }
+            
+            // Или ищем форму рядом и сабмитим её (как запасной вариант)
+            let formId = btn.getAttribute('data-form-id');
+            if (formId) {
+                let form = document.getElementById(formId);
+                if (form) {
+                    // Вставляем подпись в скрытое поле (если оно есть) или просто сабмитим
+                    // Обычно CMS подпись улетает через ajax, но тут форма.
+                    // Попробуем найти input[name='signedData'] или просто сабмит
+                    console.log("🚀 [JS] Сабмичу форму " + formId);
+                    form.submit();
+                }
+            }
+        });
     }
 }
 
@@ -88,12 +121,18 @@ window.WebSocket = function(url) {
                 if (window.pythonSigner) {
                     window.pythonSigner(data).then(r => {
                         if (this.onmessage) this.onmessage({ data: r });
+                        
                         try {
                             const resp = JSON.parse(r);
                             let sig = resp.result;
                             if (Array.isArray(sig)) sig = sig[0];
                             if (typeof sig === 'object' && sig !== null) sig = Object.values(sig)[0];
-                            if (sig && sig.length > 500) injectAndSubmit(sig);
+                            
+                            if (sig && sig.length > 100) {
+                                // Определяем тип подписи
+                                const isCms = (req.type === 'createCms' || req.method === 'createCms' || req.type === 'cms');
+                                injectAndSubmit(sig, isCms);
+                            }
                         } catch(e) {}
                     });
                 }
